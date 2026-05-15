@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interlinked — Peer Feedback</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #080808;
+    --surface:  #111111;
+    --surface2: #181818;
+    --border:   rgba(255,255,255,0.09);
+    --accent:   #4e8cff;
+    --grey:     #5a5f6e;
+    --grey-lt:  #9299a8;
+    --text:     #dde1ea;
+    --white:    #ffffff;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  #bgCanvas {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 0; opacity: 0.4;
+  }
+
+  .wrap {
+    position: relative; z-index: 1;
+    max-width: 700px; margin: 0 auto;
+    padding: 64px 24px 100px;
+  }
+
+  /* header */
+  header { margin-bottom: 60px; text-align: center; }
+
+  .eyebrow {
+    font-size: 9px; letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 20px;
+    opacity: 0; animation: fadeUp 0.6s 0.1s forwards;
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(40px, 9vw, 76px);
+    font-weight: 800; line-height: 0.9; letter-spacing: -0.03em;
+    color: var(--white); margin-bottom: 24px;
+    opacity: 0; animation: fadeUp 0.6s 0.2s forwards;
+  }
+
+  h1 em { font-style: normal; color: var(--white); }
+
+  .subtitle {
+    font-size: 11px; color: var(--grey); line-height: 1.9;
+    max-width: 400px; margin: 0 auto;
+    opacity: 0; animation: fadeUp 0.6s 0.35s forwards;
+  }
+
+  .divider {
+    width: 32px; height: 1px; background: var(--accent);
+    margin: 28px auto;
+    opacity: 0; animation: fadeUp 0.5s 0.3s forwards;
+  }
+
+  /* progress */
+  .progress-bar {
+    position: fixed; top: 0; left: 0; height: 2px;
+    background: var(--accent); z-index: 100; width: 0%;
+    transition: width 0.4s cubic-bezier(0.16,1,0.3,1);
+    box-shadow: 0 0 8px rgba(78,140,255,0.5);
+  }
+
+  /* cards */
+  .q-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 1px; padding: 34px 30px; margin-bottom: 16px;
+    position: relative; overflow: hidden;
+    opacity: 0; transform: translateY(18px);
+    transition: border-color 0.3s;
+  }
+
+  .q-card.visible { animation: fadeUp 0.5s forwards; }
+
+  .q-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+    background: var(--accent);
+    transform: scaleY(0); transform-origin: bottom;
+    transition: transform 0.4s cubic-bezier(0.16,1,0.3,1);
+  }
+
+  .q-card:focus-within::before,
+  .q-card.answered::before { transform: scaleY(1); }
+  .q-card:focus-within { border-color: rgba(78,140,255,0.3); }
+
+  .q-num {
+    font-size: 9px; letter-spacing: 0.25em; color: var(--accent);
+    text-transform: uppercase; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .q-num::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .q-text {
+    font-family: 'Syne', sans-serif; font-size: 16px;
+    font-weight: 700; line-height: 1.5; color: var(--white); margin-bottom: 26px;
+  }
+
+  /* scale */
+  .scale-wrap { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .scale-btn {
+    width: 50px; height: 50px; background: transparent;
+    border: 1px solid var(--border); border-radius: 1px;
+    color: var(--grey); font-family: 'Space Mono', monospace;
+    font-size: 17px; cursor: pointer;
+    transition: all 0.2s; position: relative; overflow: hidden;
+  }
+
+  .scale-btn::after {
+    content: ''; position: absolute; inset: 0; background: var(--accent);
+    transform: scaleY(0); transform-origin: bottom;
+    transition: transform 0.22s cubic-bezier(0.16,1,0.3,1); z-index: 0;
+  }
+
+  .scale-btn span { position: relative; z-index: 1; }
+  .scale-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .scale-btn.active { border-color: var(--accent); color: var(--bg); }
+  .scale-btn.active::after { transform: scaleY(1); }
+
+  .scale-labels {
+    display: flex; justify-content: space-between;
+    margin-top: 8px; font-size: 9px; color: var(--grey); letter-spacing: 0.08em;
+  }
+
+  /* yes/no */
+  .yn-wrap { display: flex; gap: 10px; margin-bottom: 18px; }
+
+  .yn-btn {
+    padding: 9px 26px; background: transparent;
+    border: 1px solid var(--border); border-radius: 1px;
+    color: var(--grey); font-family: 'Space Mono', monospace;
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    cursor: pointer; transition: all 0.2s;
+  }
+
+  .yn-btn:hover { border-color: var(--grey-lt); color: var(--grey-lt); }
+  .yn-btn.active { border-color: var(--white); color: var(--white); background: rgba(255,255,255,0.06); }
+
+  /* textarea */
+  textarea {
+    width: 100%; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 1px;
+    color: var(--text); font-family: 'Space Mono', monospace;
+    font-size: 12px; line-height: 1.8; padding: 13px 15px;
+    resize: vertical; outline: none; caret-color: var(--accent);
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: rgba(78,140,255,0.4); }
+  textarea::placeholder { color: var(--grey); }
+
+  /* follow-up */
+  .followup {
+    overflow: hidden; max-height: 0; opacity: 0;
+    transition: max-height 0.4s cubic-bezier(0.16,1,0.3,1), opacity 0.3s;
+  }
+  .followup.open { max-height: 180px; opacity: 1; }
+
+  /* chips */
+  .chip-label {
+    font-size: 9px; color: var(--grey); letter-spacing: 0.18em;
+    text-transform: uppercase; margin: 18px 0 9px;
+  }
+  .chip-wrap { display: flex; flex-wrap: wrap; gap: 7px; }
+
+  .chip {
+    padding: 7px 14px; background: transparent;
+    border: 1px solid var(--border); border-radius: 40px;
+    font-size: 10px; font-family: 'Space Mono', monospace;
+    color: var(--grey); cursor: pointer; transition: all 0.2s;
+  }
+  .chip:hover { border-color: var(--grey-lt); color: var(--grey-lt); }
+  .chip.active { border-color: var(--white); color: var(--white); background: rgba(255,255,255,0.06); }
+
+  /* submit */
+  .submit-wrap {
+    margin-top: 40px; text-align: center;
+    opacity: 0; animation: fadeUp 0.5s 0.9s forwards;
+  }
+
+  .submit-btn {
+    position: relative; background: transparent;
+    border: 1px solid var(--accent); color: var(--accent);
+    font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 17px 52px; cursor: pointer; border-radius: 1px;
+    overflow: hidden; transition: color 0.3s;
+  }
+  .submit-btn::before {
+    content: ''; position: absolute; inset: 0; background: var(--accent);
+    transform: translateX(-101%);
+    transition: transform 0.32s cubic-bezier(0.16,1,0.3,1); z-index: 0;
+  }
+  .submit-btn:hover { color: var(--bg); }
+  .submit-btn:hover::before { transform: translateX(0); }
+  .submit-btn span { position: relative; z-index: 1; }
+  .submit-btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+
+  .toast {
+    display: none; margin-top: 14px;
+    font-size: 10px; color: var(--grey-lt); letter-spacing: 0.06em;
+  }
+  .toast.show { display: block; }
+  .toast.err { color: #ff6b6b; }
+
+  /* success */
+  #success {
+    display: none; text-align: center;
+    padding: 80px 24px; opacity: 0; transition: opacity 0.5s;
+  }
+  #success.show { display: block; opacity: 1; }
+
+  .success-ring {
+    width: 60px; height: 60px; border-radius: 50%;
+    border: 1px solid var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 28px; font-size: 22px; color: var(--accent);
+    animation: pulse 2.5s infinite;
+  }
+  .success-title {
+    font-family: 'Syne', sans-serif; font-size: 30px;
+    font-weight: 800; color: var(--white); margin-bottom: 12px;
+  }
+  .success-sub { color: var(--grey); font-size: 12px; line-height: 1.9; }
+
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(78,140,255,0.3); }
+    50%      { box-shadow: 0 0 0 10px rgba(78,140,255,0); }
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+<canvas id="bgCanvas"></canvas>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Peer Feedback — Immersive Environment</div>
+    <h1>Inter<em>linked</em></h1>
+    <div class="divider"></div>
+    <p class="subtitle">A TouchDesigner piece exploring movement, stillness, and the residue they leave behind. Your feedback shapes the next iteration.</p>
+  </header>
+
+  <form id="feedbackForm">
+
+    <div class="q-card" data-q="1">
+      <div class="q-num">01 / 05</div>
+      <div class="q-text">How clearly did the visual effects (overlapping traces vs. blob tracking) respond to your movements?</div>
+      <div class="scale-wrap" id="scale1">
+        <button type="button" class="scale-btn" data-val="1"><span>1</span></button>
+        <button type="button" class="scale-btn" data-val="2"><span>2</span></button>
+        <button type="button" class="scale-btn" data-val="3"><span>3</span></button>
+        <button type="button" class="scale-btn" data-val="4"><span>4</span></button>
+        <button type="button" class="scale-btn" data-val="5"><span>5</span></button>
+      </div>
+      <div class="scale-labels"><span>Not at all</span><span>Perfectly clear</span></div>
+    </div>
+
+    <div class="q-card" data-q="2">
+      <div class="q-num">02 / 05</div>
+      <div class="q-text">Did you notice the background color shift when you stood still?</div>
+      <div class="yn-wrap">
+        <button type="button" class="yn-btn" data-yn="yes">Yes</button>
+        <button type="button" class="yn-btn" data-yn="no">No</button>
+      </div>
+      <div class="followup" id="followup2">
+        <textarea name="q2_detail" rows="3" placeholder="If yes — how did that color shift change your experience?"></textarea>
+      </div>
+    </div>
+
+    <div class="q-card" data-q="3">
+      <div class="q-num">03 / 05</div>
+      <div class="q-text">Which part felt the most natural, and which the most confusing?</div>
+      <div class="chip-label">Most natural</div>
+      <div class="chip-wrap">
+        <button type="button" class="chip" data-group="natural" data-val="moving">Moving → traces</button>
+        <button type="button" class="chip" data-group="natural" data-val="standing">Standing → blob</button>
+        <button type="button" class="chip" data-group="natural" data-val="color">Color shift</button>
+        <button type="button" class="chip" data-group="natural" data-val="overlap">Overlapping layers</button>
+      </div>
+      <div class="chip-label">Most confusing</div>
+      <div class="chip-wrap">
+        <button type="button" class="chip" data-group="confusing" data-val="moving">Moving → traces</button>
+        <button type="button" class="chip" data-group="confusing" data-val="standing">Standing → blob</button>
+        <button type="button" class="chip" data-group="confusing" data-val="color">Color shift</button>
+        <button type="button" class="chip" data-group="confusing" data-val="overlap">Overlapping layers</button>
+        <button type="button" class="chip" data-group="confusing" data-val="nothing">Nothing confused me</button>
+      </div>
+      <textarea name="q3_detail" rows="2" placeholder="Anything more to add…" style="margin-top:18px;"></textarea>
+    </div>
+
+    <div class="q-card" data-q="4">
+      <div class="q-num">04 / 05</div>
+      <div class="q-text">How would you describe the aesthetic quality of the traces left on the screen?</div>
+      <textarea name="q4" rows="4" placeholder="e.g. ghostly, painterly, mechanical, organic, chaotic…"></textarea>
+    </div>
+
+    <div class="q-card" data-q="5">
+      <div class="q-num">05 / 05</div>
+      <div class="q-text">If you could add one more element — sound, more colors, shapes, anything — what would it be?</div>
+      <textarea name="q5" rows="3" placeholder="Dream freely…"></textarea>
+    </div>
+
+    <div class="submit-wrap">
+      <button type="submit" class="submit-btn" id="submitBtn"><span>Submit feedback</span></button>
+      <div class="toast" id="toast"></div>
+    </div>
+  </form>
+
+  <div id="success">
+    <div class="success-ring">✦</div>
+    <div class="success-title">Thank you.</div>
+    <p class="success-sub">Your response has been recorded.<br>Every trace shapes the next version of Interlinked.</p>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════
+   STEP 4: Paste your Apps Script URL here
+   ══════════════════════════════════════════════ */
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRPa0r6-2o3yqwCa20hVCBRll4Vnc7G_ZbMmxA2wuZEnbyg3bIhUB9tPqGGfycEyqL/exec';
+
+/* ── animated background ── */
+const canvas = document.getElementById('bgCanvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+const traces = [], blobs = [];
+
+function resize(){ W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+function rnd(a,b){ return a + Math.random()*(b-a); }
+
+for(let i=0;i<55;i++){
+  const blue = Math.random() < 0.22;
+  traces.push({
+    x:rnd(0,1), y:rnd(0,1),
+    dx:rnd(-0.00022,0.00022), dy:rnd(-0.00022,0.00022),
+    len:rnd(30,140), angle:rnd(0,Math.PI*2),
+    alpha: blue ? rnd(0.07,0.15) : rnd(0.03,0.07),
+    rgb: blue ? '78,140,255' : '255,255,255'
+  });
+}
+
+for(let i=0;i<5;i++){
+  blobs.push({ x:rnd(0.15,0.85), y:rnd(0.15,0.85), r:rnd(70,160),
+    dx:rnd(-0.00014,0.00014), dy:rnd(-0.00014,0.00014), phase:rnd(0,Math.PI*2) });
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  blobs.forEach(b=>{
+    b.x=Math.max(0.1,Math.min(0.9,b.x+b.dx));
+    b.y=Math.max(0.1,Math.min(0.9,b.y+b.dy));
+    b.phase+=0.006;
+    const r=b.r+Math.sin(b.phase)*18;
+    const g=ctx.createRadialGradient(b.x*W,b.y*H,0,b.x*W,b.y*H,r);
+    g.addColorStop(0,'rgba(78,140,255,0.07)');
+    g.addColorStop(1,'rgba(78,140,255,0)');
+    ctx.beginPath(); ctx.arc(b.x*W,b.y*H,r,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+  });
+  traces.forEach(tr=>{
+    tr.x=((tr.x+tr.dx)+1)%1; tr.y=((tr.y+tr.dy)+1)%1; tr.angle+=0.002;
+    ctx.beginPath();
+    ctx.moveTo(tr.x*W,tr.y*H);
+    ctx.lineTo(tr.x*W+Math.cos(tr.angle)*tr.len,tr.y*H+Math.sin(tr.angle)*tr.len);
+    ctx.strokeStyle=`rgba(${tr.rgb},${tr.alpha})`; ctx.lineWidth=1; ctx.stroke();
+  });
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+/* ── reveal on scroll ── */
+const obs = new IntersectionObserver(entries=>{
+  entries.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('visible'); });
+},{ threshold:0.12 });
+document.querySelectorAll('.q-card').forEach((c,i)=>{ c.style.animationDelay=(i*0.07)+'s'; obs.observe(c); });
+
+/* ── form state ── */
+const state = { q1:null, q2yn:null, natural:null, confusing:null };
+
+function updateProgress(){
+  let done=0;
+  if(state.q1) done++;
+  if(state.q2yn) done++;
+  if(state.natural&&state.confusing) done++;
+  if(document.querySelector('[name=q4]').value.trim()) done++;
+  if(document.querySelector('[name=q5]').value.trim()) done++;
+  document.getElementById('progressBar').style.width=(done/5*100)+'%';
+}
+
+document.getElementById('scale1').addEventListener('click',e=>{
+  const btn=e.target.closest('.scale-btn'); if(!btn) return;
+  document.querySelectorAll('#scale1 .scale-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); state.q1=btn.dataset.val;
+  btn.closest('.q-card').classList.add('answered'); updateProgress();
+});
+
+document.querySelectorAll('.yn-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.yn-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); state.q2yn=btn.dataset.yn;
+    document.getElementById('followup2').classList.toggle('open',state.q2yn==='yes');
+    btn.closest('.q-card').classList.add('answered'); updateProgress();
+  });
+});
+
+document.querySelectorAll('.chip').forEach(chip=>{
+  chip.addEventListener('click',()=>{
+    const g=chip.dataset.group;
+    document.querySelectorAll(`.chip[data-group="${g}"]`).forEach(c=>c.classList.remove('active'));
+    chip.classList.add('active'); state[g]=chip.dataset.val; updateProgress();
+  });
+});
+
+['q4','q5'].forEach(n=>document.querySelector(`[name=${n}]`).addEventListener('input',updateProgress));
+
+/* ── submit ── */
+document.getElementById('feedbackForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const btn=document.getElementById('submitBtn');
+  const toast=document.getElementById('toast');
+
+  const payload={
+    timestamp:         new Date().toISOString(),
+    clarity_rating:    state.q1||'—',
+    noticed_bg_shift:  state.q2yn||'—',
+    bg_shift_exp:      document.querySelector('[name=q2_detail]').value||'—',
+    most_natural:      state.natural||'—',
+    most_confusing:    state.confusing||'—',
+    interaction_notes: document.querySelector('[name=q3_detail]').value||'—',
+    aesthetic_desc:    document.querySelector('[name=q4]').value||'—',
+    wishlist_element:  document.querySelector('[name=q5]').value||'—'
+  };
+
+  btn.disabled=true;
+  btn.querySelector('span').textContent='Sending…';
+  toast.className='toast show';
+  toast.textContent='Submitting your response…';
+
+  if(SCRIPT_URL==='YOUR_APPS_SCRIPT_URL_HERE'){
+    console.log('Feedback (Sheets not connected yet):', payload);
+    showSuccess(); return;
+  }
+
+  try{
+    await fetch(SCRIPT_URL,{
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    showSuccess();
+  } catch(err){
+    toast.className='toast show err';
+    toast.textContent='Connection error — please try again.';
+    btn.disabled=false;
+    btn.querySelector('span').textContent='Submit feedback';
+  }
+});
+
+function showSuccess(){
+  document.getElementById('progressBar').style.width='100%';
+  document.getElementById('feedbackForm').style.display='none';
+  const s=document.getElementById('success');
+  s.style.display='block';
+  setTimeout(()=>s.classList.add('show'),50);
+}
+</script>
+</body>
+</html>
